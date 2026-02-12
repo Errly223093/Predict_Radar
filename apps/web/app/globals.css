@@ -183,16 +183,38 @@ select {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  gap: 8px;
 }
 
 .table-header h2 {
   margin: 0;
 }
 
+.table-meta {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 .table-header span {
   color: var(--muted);
   font-size: 13px;
   font-family: var(--font-mono), monospace;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(33, 212, 201, 0.45);
+  color: #bffdf6;
+  background: rgba(33, 212, 201, 0.14);
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
 }
 
 .state-message {
@@ -202,6 +224,23 @@ select {
 
 .state-message.error {
   color: var(--down);
+}
+
+.empty-state {
+  margin: 16px 0;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .table-wrap {

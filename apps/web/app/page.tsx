@@ -34,6 +34,8 @@ const WINDOW_LABELS: Record<WindowKey, string> = {
   "24h": "24h"
 };
 
+const AUTO_REFRESH_MS = 15_000;
+
 function toSigned(value: number | null): string {
   if (value === null) return "-";
   if (value === 0) return "0.00pp";
@@ -43,9 +45,9 @@ function toSigned(value: number | null): string {
 export default function HomePage(): JSX.Element {
   const [windowKey, setWindowKey] = useState<WindowKey>("3m");
   const [sort, setSort] = useState<Sort>("desc");
-  const [tab, setTab] = useState<Tab>("opaque");
+  const [tab, setTab] = useState<Tab>("all");
   const [category, setCategory] = useState<(typeof CATEGORY_OPTIONS)[number]>("all");
-  const [includeLowLiquidity, setIncludeLowLiquidity] = useState(false);
+  const [includeLowLiquidity, setIncludeLowLiquidity] = useState(true);
   const [providers, setProviders] = useState<string[]>(["polymarket", "kalshi"]);
 
   const [rows, setRows] = useState<MoverRow[]>([]);
@@ -60,35 +62,53 @@ export default function HomePage(): JSX.Element {
   }, [rows, windowKey]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({
-      window: windowKey,
-      sort,
-      tab,
-      category,
-      providers: providers.join(","),
-      includeLowLiquidity: includeLowLiquidity ? "true" : "false"
-    });
+    let cancelled = false;
+    let inFlight = false;
 
-    setLoading(true);
-    setError(null);
+    const providersParam = providers.length > 0 ? providers.join(",") : "polymarket,kalshi";
 
-    fetch(`/api/movers?${params.toString()}`, { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as { data: MoverRow[] };
-        setRows(json.data);
-        setLastUpdated(new Date().toISOString());
-      })
-      .catch((fetchError) => {
-        if (fetchError.name === "AbortError") return;
-        setError("Failed to load live movers.");
-      })
-      .finally(() => {
-        setLoading(false);
+    const load = async (showLoading: boolean): Promise<void> => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+
+      const params = new URLSearchParams({
+        window: windowKey,
+        sort,
+        tab,
+        category,
+        providers: providersParam,
+        includeLowLiquidity: includeLowLiquidity ? "true" : "false"
       });
 
-    return () => controller.abort();
+      if (showLoading) setLoading(true);
+      if (showLoading) setError(null);
+
+      try {
+        const res = await fetch(`/api/movers?${params.toString()}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as { data: MoverRow[] };
+        if (cancelled) return;
+        setRows(json.data);
+        setLastUpdated(new Date().toISOString());
+      } catch {
+        if (!cancelled) {
+          setError("Failed to load live movers.");
+        }
+      } finally {
+        if (!cancelled && showLoading) setLoading(false);
+        inFlight = false;
+      }
+    };
+
+    void load(true);
+    const interval = setInterval(() => {
+      void load(false);
+    }, AUTO_REFRESH_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [windowKey, sort, tab, category, includeLowLiquidity, providers]);
 
   return (
@@ -212,15 +232,34 @@ export default function HomePage(): JSX.Element {
       <section className="table-card">
         <div className="table-header">
           <h2>Live Movers</h2>
-          <span>
-            {lastUpdated ? `Last update ${new Date(lastUpdated).toLocaleTimeString()}` : "Waiting"}
-          </span>
+          <div className="table-meta">
+            <span className="live-pill">Auto refresh 15s</span>
+            <span>
+              {lastUpdated ? `Last update ${new Date(lastUpdated).toLocaleTimeString()}` : "Waiting"}
+            </span>
+          </div>
         </div>
 
         {loading && <p className="state-message">Loading…</p>}
         {error && <p className="state-message error">{error}</p>}
 
-        {!loading && !error && (
+        {!loading && !error && rows.length === 0 && (
+          <div className="empty-state">
+            <p>No rows matched your current filters.</p>
+            <button
+              type="button"
+              className="chip active"
+              onClick={() => {
+                setTab("all");
+                setIncludeLowLiquidity(true);
+              }}
+            >
+              Show all signals
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && rows.length > 0 && (
           <div className="table-wrap">
             <table>
               <thead>
