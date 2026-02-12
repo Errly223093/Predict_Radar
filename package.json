@@ -1,0 +1,18 @@
+{
+  "name": "predict-radar",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run build --workspace @predict-radar/shared && npm run dev --workspace @predict-radar/web",
+    "dev:worker": "npm run build --workspace @predict-radar/shared && npm run dev --workspace @predict-radar/worker",
+    "build": "npm run build --workspace @predict-radar/shared && npm run build --workspace @predict-radar/worker && npm run build --workspace @predict-radar/web",
+    "typecheck": "npm run typecheck --workspace @predict-radar/shared && npm run typecheck --workspace @predict-radar/worker && npm run typecheck --workspace @predict-radar/web"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

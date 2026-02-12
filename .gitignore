@@ -13,3 +13,19 @@ Desktop.ini
 
 # Logs
 *.log
+
+# Node
+node_modules/
+.next/
+dist/
+coverage/
+
+# Env
+.env
+.env.local
+
+# Build/cache
+.turbo/
+.cache/
+.npm-cache/
+.tools/
