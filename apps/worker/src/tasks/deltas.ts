@@ -1,11 +1,11 @@
 import { pool } from "../db.js";
 
 const WINDOW_SPECS = [
-  { key: "3m", minutes: 3 },
-  { key: "9m", minutes: 9 },
+  { key: "1m", minutes: 1 },
+  { key: "5m", minutes: 5 },
+  { key: "10m", minutes: 10 },
   { key: "30m", minutes: 30 },
   { key: "1h", minutes: 60 },
-  { key: "3h", minutes: 180 },
   { key: "6h", minutes: 360 },
   { key: "12h", minutes: 720 },
   { key: "24h", minutes: 1440 }
@@ -55,11 +55,11 @@ function buildDeltaInsertSql(): string {
       provider,
       market_id,
       outcome_id,
-      delta_3m,
-      delta_9m,
+      delta_1m,
+      delta_5m,
+      delta_10m,
       delta_30m,
       delta_1h,
-      delta_3h,
       delta_6h,
       delta_12h,
       delta_24h

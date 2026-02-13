@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState, type JSX } from "react";
-import { WINDOWS, type MoverRow, type WindowKey } from "@/lib/contracts";
+import { Fragment, useEffect, useMemo, useState, type JSX } from "react";
+import {
+  type Label,
+  type MoverMarketRow,
+  type MoverOutcomeRow,
+  type WindowKey
+} from "@/lib/contracts";
 
 type Tab = "opaque" | "exogenous" | "all";
 
-type Sort = "asc" | "desc";
+type SortDir = "asc" | "desc";
 
 type MoversMeta = {
-  window: WindowKey;
-  sort: string;
+  sortWindow: WindowKey;
+  sort: SortDir;
   page: number;
   pageSize: number;
   totalRows: number;
@@ -33,14 +38,27 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 const WINDOW_LABELS: Record<WindowKey, string> = {
-  "3m": "3m",
-  "9m": "9m",
+  "1m": "Live",
+  "5m": "5m",
+  "10m": "10m",
   "30m": "30m",
   "1h": "1h",
-  "3h": "3h",
   "6h": "6h",
   "12h": "12h",
   "24h": "24h"
+};
+
+const SECONDARY_WINDOWS: WindowKey[] = ["5m", "10m", "30m", "1h", "6h", "12h", "24h"];
+
+const STRONG_THRESHOLDS_PP: Record<WindowKey, number> = {
+  "1m": 6,
+  "5m": 8,
+  "10m": 10,
+  "30m": 14,
+  "1h": 18,
+  "6h": 24,
+  "12h": 30,
+  "24h": 38
 };
 
 const AUTO_REFRESH_MS = 15_000;
@@ -52,26 +70,83 @@ function toSigned(value: number | null): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}pp`;
 }
 
+function deltaClass(value: number | null): string {
+  if (value === null) return "neutral";
+  if (value > 0) return "up";
+  if (value < 0) return "down";
+  return "neutral";
+}
+
+function formatUsd(value: number | null): string {
+  if (value === null) return "-";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}m`;
+  if (abs >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
+  return `$${value.toFixed(0)}`;
+}
+
+function labelDisplay(label: Label): string {
+  switch (label) {
+    case "opaque_info_sensitive":
+      return "Opaque-Info";
+    case "exogenous_arbitrage":
+      return "Exogenous";
+    case "unclear":
+      return "Unclear";
+    default:
+      return label;
+  }
+}
+
+function isKalshiMve(meta: Record<string, unknown> | null): boolean {
+  return Boolean(meta && meta["kind"] === "kalshi_mve" && Array.isArray(meta["legs"]));
+}
+
+function getMveLegs(meta: Record<string, unknown> | null): Array<{ side: string | null; text: string }> {
+  if (!isKalshiMve(meta)) return [];
+  const legs = meta?.["legs"];
+  if (!Array.isArray(legs)) return [];
+  return legs
+    .map((leg) => {
+      const record = (leg ?? {}) as Record<string, unknown>;
+      return {
+        side: typeof record["side"] === "string" ? record["side"] : null,
+        text: typeof record["text"] === "string" ? record["text"] : String(record["raw"] ?? "")
+      };
+    })
+    .filter((leg) => leg.text.trim().length > 0);
+}
+
 export default function HomePage(): JSX.Element {
-  const [windowKey, setWindowKey] = useState<WindowKey>("3m");
-  const [sort, setSort] = useState<Sort>("desc");
+  const [secondaryWindow, setSecondaryWindow] = useState<WindowKey>("30m");
+  const [sortWindow, setSortWindow] = useState<WindowKey>("1m");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [tab, setTab] = useState<Tab>("all");
   const [category, setCategory] = useState<(typeof CATEGORY_OPTIONS)[number]>("all");
   const [includeLowLiquidity, setIncludeLowLiquidity] = useState(true);
   const [providers, setProviders] = useState<string[]>(["polymarket", "kalshi"]);
   const [page, setPage] = useState(1);
 
-  const [rows, setRows] = useState<MoverRow[]>([]);
+  const [markets, setMarkets] = useState<MoverMarketRow[]>([]);
   const [pageMeta, setPageMeta] = useState<MoversMeta | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   const snapshotStats = useMemo(() => {
-    const total = pageMeta?.totalRows ?? rows.length;
-    const strongMoves = rows.filter((row) => Math.abs(row.deltasPp[windowKey] ?? 0) >= 15).length;
-    return { total, strongMoves };
-  }, [rows, windowKey, pageMeta?.totalRows]);
+    const total = pageMeta?.totalRows ?? markets.length;
+    const threshold = STRONG_THRESHOLDS_PP[sortWindow];
+
+    const strongMoves = markets.filter((market) => {
+      const lead = market.outcomes.find((outcome) => outcome.outcomeId === market.leadOutcomeId);
+      const delta = lead?.deltasPp[sortWindow] ?? null;
+      return delta !== null && Math.abs(delta) >= threshold;
+    }).length;
+
+    return { total, strongMoves, threshold };
+  }, [markets, pageMeta?.totalRows, sortWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,8 +159,8 @@ export default function HomePage(): JSX.Element {
       inFlight = true;
 
       const params = new URLSearchParams({
-        window: windowKey,
-        sort,
+        sortWindow,
+        sort: sortDir,
         tab,
         category,
         providers: providersParam,
@@ -100,9 +175,9 @@ export default function HomePage(): JSX.Element {
       try {
         const res = await fetch(`/api/movers?${params.toString()}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as { data: MoverRow[]; meta?: MoversMeta };
+        const json = (await res.json()) as { data: MoverMarketRow[]; meta?: MoversMeta };
         if (cancelled) return;
-        setRows(json.data);
+        setMarkets(json.data);
         setPageMeta(json.meta ?? null);
         setLastUpdated(new Date().toISOString());
       } catch {
@@ -124,7 +199,40 @@ export default function HomePage(): JSX.Element {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [windowKey, sort, tab, category, includeLowLiquidity, providers, page]);
+  }, [sortWindow, sortDir, tab, category, includeLowLiquidity, providers, page]);
+
+  const toggleExpanded = (key: string): void => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const onSortClick = (windowKey: WindowKey): void => {
+    setExpandedKeys(new Set());
+    setPage(1);
+    if (sortWindow === windowKey) {
+      setSortDir((prev) => (prev === "desc" ? "asc" : "desc"));
+      return;
+    }
+    setSortWindow(windowKey);
+    setSortDir("desc");
+  };
+
+  const onSecondaryWindowChange = (next: WindowKey): void => {
+    setExpandedKeys(new Set());
+    setPage(1);
+    setSecondaryWindow(next);
+    if (sortWindow !== "1m") {
+      setSortWindow(next);
+    }
+  };
+
+  const leadOutcome = (market: MoverMarketRow): MoverOutcomeRow | null => {
+    return market.outcomes.find((outcome) => outcome.outcomeId === market.leadOutcomeId) ?? null;
+  };
 
   return (
     <main className="page-shell">
@@ -143,12 +251,12 @@ export default function HomePage(): JSX.Element {
             <strong>{snapshotStats.total}</strong>
           </article>
           <article>
-            <span>Strong Moves</span>
+            <span>{`Strong Moves (>=${snapshotStats.threshold}pp @${WINDOW_LABELS[sortWindow]})`}</span>
             <strong>{snapshotStats.strongMoves}</strong>
           </article>
           <article>
-            <span>Window</span>
-            <strong>{WINDOW_LABELS[windowKey]}</strong>
+            <span>Sort Window</span>
+            <strong>{WINDOW_LABELS[sortWindow]}</strong>
           </article>
         </div>
       </section>
@@ -156,41 +264,11 @@ export default function HomePage(): JSX.Element {
       <section className="control-card">
         <div className="control-row">
           <label>
-            Window
-            <select
-              value={windowKey}
-              onChange={(e) => {
-                setWindowKey(e.target.value as WindowKey);
-                setPage(1);
-              }}
-            >
-              {WINDOWS.map((window) => (
-                <option key={window} value={window}>
-                  {WINDOW_LABELS[window]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Sort
-            <select
-              value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as Sort);
-                setPage(1);
-              }}
-            >
-              <option value="desc">Delta Desc</option>
-              <option value="asc">Delta Asc</option>
-            </select>
-          </label>
-
-          <label>
             Category
             <select
               value={category}
               onChange={(e) => {
+                setExpandedKeys(new Set());
                 setCategory(e.target.value as (typeof CATEGORY_OPTIONS)[number]);
                 setPage(1);
               }}
@@ -208,6 +286,7 @@ export default function HomePage(): JSX.Element {
             <select
               value={tab}
               onChange={(e) => {
+                setExpandedKeys(new Set());
                 setTab(e.target.value as Tab);
                 setPage(1);
               }}
@@ -226,6 +305,7 @@ export default function HomePage(): JSX.Element {
             type="button"
             className={providers.includes("polymarket") ? "chip active" : "chip"}
             onClick={() => {
+              setExpandedKeys(new Set());
               setProviders((prev) =>
                 prev.includes("polymarket")
                   ? prev.filter((item) => item !== "polymarket")
@@ -240,10 +320,9 @@ export default function HomePage(): JSX.Element {
             type="button"
             className={providers.includes("kalshi") ? "chip active" : "chip"}
             onClick={() => {
+              setExpandedKeys(new Set());
               setProviders((prev) =>
-                prev.includes("kalshi")
-                  ? prev.filter((item) => item !== "kalshi")
-                  : [...prev, "kalshi"]
+                prev.includes("kalshi") ? prev.filter((item) => item !== "kalshi") : [...prev, "kalshi"]
               );
               setPage(1);
             }}
@@ -259,6 +338,7 @@ export default function HomePage(): JSX.Element {
               type="checkbox"
               checked={includeLowLiquidity}
               onChange={(e) => {
+                setExpandedKeys(new Set());
                 setIncludeLowLiquidity(e.target.checked);
                 setPage(1);
               }}
@@ -279,16 +359,48 @@ export default function HomePage(): JSX.Element {
           </div>
         </div>
 
+        <div className="table-toolbar">
+          <label className="toolbar-label">
+            Window
+            <select
+              value={secondaryWindow}
+              onChange={(e) => onSecondaryWindowChange(e.target.value as WindowKey)}
+            >
+              {SECONDARY_WINDOWS.map((window) => (
+                <option key={window} value={window}>
+                  {WINDOW_LABELS[window]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <details className="legend">
+            <summary>Label guide</summary>
+            <div className="legend-body">
+              <p>
+                <strong>Opaque-Info</strong>: internal / hard-to-arbitrage info could be driving the move.
+              </p>
+              <p>
+                <strong>Exogenous</strong>: sports-live or crypto-price linked moves (often fast arbitrage).
+              </p>
+              <p>
+                <strong>Unclear</strong>: not enough evidence either way yet.
+              </p>
+            </div>
+          </details>
+        </div>
+
         {loading && <p className="state-message">Loading…</p>}
         {error && <p className="state-message error">{error}</p>}
 
-        {!loading && !error && rows.length === 0 && (
+        {!loading && !error && markets.length === 0 && (
           <div className="empty-state">
             <p>No rows matched your current filters.</p>
             <button
               type="button"
               className="chip active"
               onClick={() => {
+                setExpandedKeys(new Set());
                 setTab("all");
                 setIncludeLowLiquidity(true);
                 setPage(1);
@@ -299,7 +411,7 @@ export default function HomePage(): JSX.Element {
           </div>
         )}
 
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && markets.length > 0 && (
           <>
             <div className="table-wrap">
               <table>
@@ -308,53 +420,139 @@ export default function HomePage(): JSX.Element {
                     <th className="row-no">#</th>
                     <th>Market</th>
                     <th>Provider</th>
-                    <th>Outcome</th>
-                    <th>Prob</th>
-                    <th>{WINDOW_LABELS[windowKey]}</th>
-                    <th>24h</th>
+                    <th className="delta-th">
+                      <button type="button" className="th-button" onClick={() => onSortClick("1m")}>
+                        {WINDOW_LABELS["1m"]}
+                        {sortWindow === "1m" ? (sortDir === "desc" ? " v" : " ^") : ""}
+                      </button>
+                    </th>
+                    <th className="delta-th">
+                      <button
+                        type="button"
+                        className="th-button"
+                        onClick={() => onSortClick(secondaryWindow)}
+                      >
+                        {WINDOW_LABELS[secondaryWindow]}
+                        {sortWindow === secondaryWindow ? (sortDir === "desc" ? " v" : " ^") : ""}
+                      </button>
+                    </th>
                     <th>Category</th>
                     <th>Label</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, index) => {
+                  {markets.map((market, index) => {
+                    const key = `${market.provider}:${market.marketId}`;
+                    const expanded = expandedKeys.has(key);
                     const rowNo = (page - 1) * PAGE_SIZE + index + 1;
-                    const selectedDelta = row.deltasPp[windowKey];
-                    const deltaClass =
-                      selectedDelta === null
-                        ? "neutral"
-                        : selectedDelta > 0
-                          ? "up"
-                          : selectedDelta < 0
-                            ? "down"
-                            : "neutral";
+                    const lead = leadOutcome(market);
+                    const deltaLive = lead?.deltasPp["1m"] ?? null;
+                    const deltaSecondary = lead?.deltasPp[secondaryWindow] ?? null;
 
                     return (
-                      <tr key={`${row.provider}:${row.marketId}:${row.outcomeId}`}>
-                        <td className="row-no">{rowNo}</td>
-                        <td>
-                          <p className="market-title">{row.marketTitle}</p>
-                        </td>
-                        <td>{row.provider}</td>
-                        <td>{row.outcomeLabel}</td>
-                        <td>{(row.probability * 100).toFixed(2)}%</td>
-                        <td className={deltaClass}>{toSigned(selectedDelta)}</td>
-                        <td
-                          className={
-                            row.deltasPp["24h"] === null
-                              ? "neutral"
-                              : row.deltasPp["24h"] > 0
-                                ? "up"
-                                : "down"
-                          }
+                      <Fragment key={key}>
+                        <tr
+                          className={expanded ? "market-row expanded" : "market-row"}
+                          onClick={() => toggleExpanded(key)}
                         >
-                          {toSigned(row.deltasPp["24h"])}
-                        </td>
-                        <td>{row.normalizedCategory}</td>
-                        <td>
-                          <span className={`pill ${row.label}`}>{row.label}</span>
-                        </td>
-                      </tr>
+                          <td className="row-no">{rowNo}</td>
+                          <td>
+                            <p className="market-title">{market.marketTitle}</p>
+                          </td>
+                          <td>{market.provider}</td>
+                          <td className={deltaClass(deltaLive)}>{toSigned(deltaLive)}</td>
+                          <td className={deltaClass(deltaSecondary)}>{toSigned(deltaSecondary)}</td>
+                          <td>{market.normalizedCategory}</td>
+                          <td>
+                            <span className={`pill ${market.label}`}>{labelDisplay(market.label)}</span>
+                          </td>
+                        </tr>
+
+                        {expanded && (
+                          <tr className="details-row">
+                            <td colSpan={7}>
+                              <div className="details-panel">
+                                {isKalshiMve(market.marketMeta) && (
+                                  <div className="legs-panel">
+                                    <h3>Legs</h3>
+                                    <div className="legs-grid">
+                                      {getMveLegs(market.marketMeta).map((leg, legIndex) => (
+                                        <div key={`${key}:leg:${legIndex}`} className="leg-chip">
+                                          <span className="leg-side">{leg.side ?? "?"}</span>
+                                          <span className="leg-text">{leg.text}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="outcomes-panel">
+                                  <h3>{`Outcomes (${market.outcomes.length})`}</h3>
+                                  <div className="subtable-wrap">
+                                    <table className="subtable">
+                                      <thead>
+                                        <tr>
+                                          <th>Outcome</th>
+                                          <th>Prob</th>
+                                          <th>{WINDOW_LABELS["1m"]}</th>
+                                          <th>{WINDOW_LABELS[secondaryWindow]}</th>
+                                          <th>24h</th>
+                                          <th>Liquidity</th>
+                                          <th>Spread</th>
+                                          <th>Label</th>
+                                          <th>Reasons</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {market.outcomes.map((outcome) => {
+                                          const live = outcome.deltasPp["1m"];
+                                          const second = outcome.deltasPp[secondaryWindow];
+                                          const day = outcome.deltasPp["24h"];
+                                          const isLead = outcome.outcomeId === market.leadOutcomeId;
+                                          return (
+                                            <tr
+                                              key={`${key}:${outcome.outcomeId}`}
+                                              className={isLead ? "subrow lead" : "subrow"}
+                                            >
+                                              <td>{outcome.outcomeLabel}</td>
+                                              <td>{(outcome.probability * 100).toFixed(2)}%</td>
+                                              <td className={deltaClass(live)}>{toSigned(live)}</td>
+                                              <td className={deltaClass(second)}>{toSigned(second)}</td>
+                                              <td className={deltaClass(day)}>{toSigned(day)}</td>
+                                              <td>{formatUsd(outcome.liquidityUsd)}</td>
+                                              <td>
+                                                {outcome.spreadPp === null
+                                                  ? "-"
+                                                  : `${outcome.spreadPp.toFixed(2)}pp`}
+                                              </td>
+                                              <td>
+                                                <span className={`pill ${outcome.label}`}>{labelDisplay(outcome.label)}</span>
+                                              </td>
+                                              <td>
+                                                <div className="reason-chips">
+                                                  {outcome.reasonTags.length === 0 ? (
+                                                    <span className="reason-empty">-</span>
+                                                  ) : (
+                                                    outcome.reasonTags.map((tag) => (
+                                                      <span key={`${key}:${outcome.outcomeId}:${tag}`} className="reason-chip">
+                                                        {tag}
+                                                      </span>
+                                                    ))
+                                                  )}
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -367,7 +565,10 @@ export default function HomePage(): JSX.Element {
                   type="button"
                   className="chip"
                   disabled={page <= 1}
-                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  onClick={() => {
+                    setExpandedKeys(new Set());
+                    setPage((prev) => Math.max(1, prev - 1));
+                  }}
                 >
                   Prev
                 </button>
@@ -378,7 +579,10 @@ export default function HomePage(): JSX.Element {
                   type="button"
                   className="chip"
                   disabled={page >= pageMeta.totalPages}
-                  onClick={() => setPage((prev) => prev + 1)}
+                  onClick={() => {
+                    setExpandedKeys(new Set());
+                    setPage((prev) => prev + 1);
+                  }}
                 >
                   Next
                 </button>

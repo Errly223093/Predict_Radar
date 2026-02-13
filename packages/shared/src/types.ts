@@ -1,13 +1,13 @@
-export const WINDOWS = ["3m", "9m", "30m", "1h", "3h", "6h", "12h", "24h"] as const;
+export const WINDOWS = ["1m", "5m", "10m", "30m", "1h", "6h", "12h", "24h"] as const;
 
 export type WindowKey = (typeof WINDOWS)[number];
 
 export const WINDOW_TO_MINUTES: Record<WindowKey, number> = {
-  "3m": 3,
-  "9m": 9,
+  "1m": 1,
+  "5m": 5,
+  "10m": 10,
   "30m": 30,
   "1h": 60,
-  "3h": 180,
   "6h": 360,
   "12h": 720,
   "24h": 1440
@@ -33,6 +33,7 @@ export interface OutcomeSnapshot {
   marketTitle: string;
   rawCategory: string | null;
   normalizedCategory: Category;
+  marketMeta?: Record<string, unknown>;
   probability: number;
   spreadPp: number | null;
   volume24hUsd: number | null;

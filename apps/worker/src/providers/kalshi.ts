@@ -13,6 +13,8 @@ const KALSHI_ENDPOINTS = [
 
 type UnknownRecord = Record<string, unknown>;
 
+type MveLegDisplay = { side: "yes" | "no" | null; text: string; raw: string };
+
 function toNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string" && value.trim()) {
@@ -46,6 +48,24 @@ async function fetchOpenMarkets(): Promise<UnknownRecord[]> {
   return [];
 }
 
+function buildMveLegs(rawTitle: string): MveLegDisplay[] {
+  const parts = rawTitle
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return parts.map((raw) => {
+    const lower = raw.toLowerCase();
+    if (lower.startsWith("yes ")) {
+      return { side: "yes", text: raw.slice(4).trim(), raw };
+    }
+    if (lower.startsWith("no ")) {
+      return { side: "no", text: raw.slice(3).trim(), raw };
+    }
+    return { side: null, text: raw, raw };
+  });
+}
+
 export class KalshiAdapter implements ProviderAdapter {
   readonly name: Provider = "kalshi";
 
@@ -59,7 +79,30 @@ export class KalshiAdapter implements ProviderAdapter {
       const marketId = String(market["ticker"] ?? market["id"] ?? "");
       if (!marketId) continue;
 
-      const title = String(market["title"] ?? market["subtitle"] ?? marketId);
+      const rawTitle = String(market["title"] ?? market["subtitle"] ?? marketId);
+      const mveSelectedLegs = Array.isArray(market["mve_selected_legs"])
+        ? (market["mve_selected_legs"] as UnknownRecord[])
+        : [];
+      const isMve = mveSelectedLegs.length >= 2;
+
+      let title = rawTitle;
+      let marketMeta: Record<string, unknown> | undefined;
+      if (isMve) {
+        const legs = buildMveLegs(rawTitle);
+        const legsCount = legs.length || mveSelectedLegs.length;
+        const headline = legs[0]?.text?.slice(0, 140) || "Combo";
+        title = legsCount > 1 ? `${headline} (+${legsCount - 1} legs)` : headline;
+        marketMeta = {
+          kind: "kalshi_mve",
+          legs,
+          legsCount,
+          originalTitle: rawTitle,
+          eventTicker: String(market["event_ticker"] ?? ""),
+          collectionTicker: String(market["mve_collection_ticker"] ?? ""),
+          selectedLegs: mveSelectedLegs
+        };
+      }
+
       const rawCategory =
         String(market["category"] ?? market["event_ticker"] ?? market["series_ticker"] ?? "") ||
         null;
@@ -90,6 +133,7 @@ export class KalshiAdapter implements ProviderAdapter {
         marketTitle: title,
         rawCategory,
         normalizedCategory,
+        marketMeta,
         probability: yesProb,
         spreadPp,
         volume24hUsd,
@@ -105,6 +149,7 @@ export class KalshiAdapter implements ProviderAdapter {
         marketTitle: title,
         rawCategory,
         normalizedCategory,
+        marketMeta,
         probability: clampProbability(1 - yesProb),
         spreadPp,
         volume24hUsd,

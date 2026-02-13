@@ -1,4 +1,4 @@
-export const WINDOWS = ["3m", "9m", "30m", "1h", "3h", "6h", "12h", "24h"] as const;
+export const WINDOWS = ["1m", "5m", "10m", "30m", "1h", "6h", "12h", "24h"] as const;
 
 export type WindowKey = (typeof WINDOWS)[number];
 
@@ -14,7 +14,7 @@ export type Category =
   | "macro"
   | "other";
 
-export interface MoverRow {
+export interface MoverOutcomeRow {
   provider: Provider;
   marketId: string;
   marketTitle: string;
@@ -24,8 +24,22 @@ export interface MoverRow {
   probability: number;
   volume24hUsd: number | null;
   liquidityUsd: number | null;
+  spreadPp: number | null;
   label: Label;
   reasonTags: string[];
   deltasPp: Record<WindowKey, number | null>;
+  timestamp: string;
+}
+
+export interface MoverMarketRow {
+  provider: Provider;
+  marketId: string;
+  marketTitle: string;
+  normalizedCategory: Category;
+  label: Label;
+  reasonTags: string[];
+  leadOutcomeId: string;
+  marketMeta: Record<string, unknown> | null;
+  outcomes: MoverOutcomeRow[];
   timestamp: string;
 }

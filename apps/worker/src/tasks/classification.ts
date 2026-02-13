@@ -12,7 +12,7 @@ type ClassificationInputRow = {
   spread_pp: number | null;
   volume_24h_usd: number | null;
   liquidity_usd: number | null;
-  delta_3m: number | null;
+  delta_1m: number | null;
   delta_24h: number | null;
 };
 
@@ -39,7 +39,7 @@ export async function runClassification(): Promise<number> {
         s.spread_pp,
         s.volume_24h_usd,
         s.liquidity_usd,
-        d.delta_3m,
+        d.delta_1m,
         d.delta_24h
       FROM deltas d
       JOIN markets m
@@ -63,7 +63,7 @@ export async function runClassification(): Promise<number> {
     const reasonTags: string[] = [];
 
     const title = row.title ?? "";
-    const abs3m = Math.abs(row.delta_3m ?? 0);
+    const abs1m = Math.abs(row.delta_1m ?? 0);
 
     if (row.normalized_category === "sports" || isSportsLinked(title)) {
       exogenousScore += 45;
@@ -87,7 +87,7 @@ export async function runClassification(): Promise<number> {
       reasonTags.push("opaque_info_prone_category");
     }
 
-    if ((row.volume_24h_usd ?? 0) >= 10_000 && abs3m >= 6) {
+    if ((row.volume_24h_usd ?? 0) >= 10_000 && abs1m >= 4) {
       opaqueScore += 20;
       reasonTags.push("meaningful_size_move");
     }
@@ -97,7 +97,7 @@ export async function runClassification(): Promise<number> {
       reasonTags.push("tight_spread");
     }
 
-    if (abs3m >= 25) {
+    if (abs1m >= 15) {
       exogenousScore += 15;
       reasonTags.push("abrupt_micro_move");
     }

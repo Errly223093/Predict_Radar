@@ -3,14 +3,14 @@ import { config } from "../config.js";
 import { pool } from "../db.js";
 
 const ALERT_THRESHOLDS: Record<WindowKey, number> = {
-  "3m": 5,
-  "9m": 7,
-  "30m": 10,
-  "1h": 13,
-  "3h": 18,
-  "6h": 22,
-  "12h": 28,
-  "24h": 36
+  "1m": 6,
+  "5m": 8,
+  "10m": 10,
+  "30m": 14,
+  "1h": 18,
+  "6h": 24,
+  "12h": 30,
+  "24h": 38
 };
 
 type AlertRow = {
@@ -25,11 +25,11 @@ type AlertRow = {
   volume_24h_usd: number | null;
   label: string;
   reason_tags: string[];
-  delta_3m: number | null;
-  delta_9m: number | null;
+  delta_1m: number | null;
+  delta_5m: number | null;
+  delta_10m: number | null;
   delta_30m: number | null;
   delta_1h: number | null;
-  delta_3h: number | null;
   delta_6h: number | null;
   delta_12h: number | null;
   delta_24h: number | null;
@@ -37,16 +37,16 @@ type AlertRow = {
 
 function extractDelta(row: AlertRow, window: WindowKey): number | null {
   switch (window) {
-    case "3m":
-      return row.delta_3m;
-    case "9m":
-      return row.delta_9m;
+    case "1m":
+      return row.delta_1m;
+    case "5m":
+      return row.delta_5m;
+    case "10m":
+      return row.delta_10m;
     case "30m":
       return row.delta_30m;
     case "1h":
       return row.delta_1h;
-    case "3h":
-      return row.delta_3h;
     case "6h":
       return row.delta_6h;
     case "12h":
@@ -159,11 +159,11 @@ export async function runAlerts(): Promise<number> {
         s.volume_24h_usd,
         c.label,
         c.reason_tags,
-        d.delta_3m,
-        d.delta_9m,
+        d.delta_1m,
+        d.delta_5m,
+        d.delta_10m,
         d.delta_30m,
         d.delta_1h,
-        d.delta_3h,
         d.delta_6h,
         d.delta_12h,
         d.delta_24h
@@ -189,7 +189,7 @@ export async function runAlerts(): Promise<number> {
         AND c.label = 'opaque_info_sensitive'
         AND COALESCE(s.liquidity_usd, 0) >= $2
         AND COALESCE(s.spread_pp, 100) <= $3
-      ORDER BY ABS(COALESCE(d.delta_3m, 0)) DESC
+      ORDER BY ABS(COALESCE(d.delta_1m, 0)) DESC
       LIMIT 500
     `,
     [ts, config.MIN_LIQUIDITY_USD, config.MAX_SPREAD_PP]

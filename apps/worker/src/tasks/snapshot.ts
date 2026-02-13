@@ -3,17 +3,20 @@ import { pool, toMinute } from "../db.js";
 import type { ProviderAdapter } from "../providers/base.js";
 
 async function upsertSnapshot(snapshot: OutcomeSnapshot): Promise<void> {
+  const marketMeta = snapshot.marketMeta ?? {};
+
   await pool.query(
     `
       INSERT INTO markets (
         provider, market_id, title, raw_category, normalized_category, status, metadata_json, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, 'open', '{}'::jsonb, now())
+      VALUES ($1, $2, $3, $4, $5, 'open', $6::jsonb, now())
       ON CONFLICT (provider, market_id)
       DO UPDATE SET
         title = EXCLUDED.title,
         raw_category = EXCLUDED.raw_category,
         normalized_category = EXCLUDED.normalized_category,
+        metadata_json = COALESCE(markets.metadata_json, '{}'::jsonb) || EXCLUDED.metadata_json,
         updated_at = now()
     `,
     [
@@ -21,7 +24,8 @@ async function upsertSnapshot(snapshot: OutcomeSnapshot): Promise<void> {
       snapshot.marketId,
       snapshot.marketTitle,
       snapshot.rawCategory,
-      snapshot.normalizedCategory
+      snapshot.normalizedCategory,
+      marketMeta
     ]
   );
 
