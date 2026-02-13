@@ -16,6 +16,11 @@ const configSchema = z.object({
     .transform((value) => value === "true"),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
+  TELEGRAM_MODE: z.enum(["bot", "user"]).optional(),
+  TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
+  TELEGRAM_API_HASH: z.string().optional(),
+  TELEGRAM_SESSION: z.string().optional(),
+  TELEGRAM_TARGET: z.string().optional(),
   TELEGRAM_COOLDOWN_MINUTES: z.coerce.number().int().positive().default(30)
 });
 

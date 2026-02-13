@@ -7,11 +7,14 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "telegram:login": "tsx src/scripts/telegram-login.ts",
+    "train:anchor-model": "tsx src/scripts/train-anchor-model.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@predict-radar/shared": "file:../../packages/shared",
     "pg": "^8.13.1",
+    "telegram": "^2.26.8",
     "zod": "^3.24.1"
   },
   "devDependencies": {

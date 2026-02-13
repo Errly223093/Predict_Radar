@@ -1,13 +1,13 @@
 import { pool } from "../db.js";
-
-type AnchorType =
-  | "spot_price_anchored"
-  | "live_score_anchored"
-  | "scheduled_macro_release"
-  | "policy_regulatory_decision"
-  | "sports_team_news"
-  | "crypto_news_security"
-  | "other_unknown";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildMarketText } from "../utils/market-text.js";
+import {
+  AnchorNbModel,
+  anchorTypeInsiderPossible,
+  loadAnchorNbModel,
+  type AnchorType
+} from "../ml/anchor-nb.js";
 
 type MarketRow = {
   provider: string;
@@ -17,7 +17,36 @@ type MarketRow = {
   metadata_json: Record<string, unknown> | null;
 };
 
-const MODEL_VERSION = "anchor-rules-v1";
+const RULES_MODEL_VERSION = "anchor-rules-v1";
+const HYBRID_MODEL_VERSION = "anchor-hybrid-nb-v1";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const MODEL_PATH = path.resolve(__dirname, "../../models/anchor-nb-v1.json");
+
+let cachedModel: AnchorNbModel | null = null;
+let lastModelCheckMs = 0;
+
+async function getModel(): Promise<AnchorNbModel | null> {
+  const now = Date.now();
+  if (cachedModel && now - lastModelCheckMs < 10 * 60_000) return cachedModel;
+  if (!cachedModel && now - lastModelCheckMs < 60_000) return cachedModel;
+
+  lastModelCheckMs = now;
+  const loaded = await loadAnchorNbModel(MODEL_PATH);
+  if (loaded) {
+    cachedModel = loaded;
+    console.info(`[profiles] loaded ${loaded.modelVersion} vocab=${loaded.vocab.length}`);
+    return cachedModel;
+  }
+
+  if (cachedModel) {
+    // Keep the previous model if the file temporarily disappears.
+    return cachedModel;
+  }
+
+  return null;
+}
 
 const CRYPTO_KEYWORDS = [
   "btc",
@@ -31,7 +60,7 @@ const CRYPTO_KEYWORDS = [
   "altcoin"
 ];
 
-const PRICE_ANCHOR_KEYWORDS = ["above", "below", "over", "under", "at least", ">= ", "<= ", "$"];
+const PRICE_ANCHOR_KEYWORDS = ["above", "below", "over", "under", "at least", ">=", "<=", "$"];
 
 const SPORTS_KEYWORDS = [
   "vs",
@@ -109,34 +138,6 @@ const CRYPTO_NEWS_PATTERNS: RegExp[] = [
   /\bsec\b/i
 ];
 
-function normalizeText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/[^\p{L}\p{N}\s:$+.-]/gu, " ")
-    .trim();
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function marketText(title: string, meta: Record<string, unknown> | null): string {
-  const parts: string[] = [title];
-  if (meta && typeof meta === "object") {
-    if (typeof meta["originalTitle"] === "string") parts.push(String(meta["originalTitle"]));
-
-    const legs = asArray(meta["legs"]);
-    for (const leg of legs) {
-      const record = (leg ?? {}) as Record<string, unknown>;
-      if (typeof record["raw"] === "string") parts.push(record["raw"]);
-      else if (typeof record["text"] === "string") parts.push(record["text"]);
-    }
-  }
-
-  return normalizeText(parts.join(" "));
-}
-
 function includesAny(text: string, keywords: string[]): boolean {
   return keywords.some((kw) => text.includes(kw));
 }
@@ -145,9 +146,10 @@ function matchesAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(text));
 }
 
-function classifyAnchor(row: MarketRow): { anchorType: AnchorType; insiderPossible: boolean; confidence: number } {
-  const text = marketText(row.title ?? "", row.metadata_json);
+function classifyAnchor(row: MarketRow, model: AnchorNbModel | null): { anchorType: AnchorType; insiderPossible: boolean; confidence: number } {
+  const text = buildMarketText(row.title ?? "", row.metadata_json);
   const category = String(row.normalized_category ?? "").toLowerCase();
+  const provider = String(row.provider ?? "").toLowerCase();
 
   const isCryptoContext = category === "crypto" || includesAny(text, CRYPTO_KEYWORDS);
   const isSportsContext = category === "sports" || includesAny(text, SPORTS_KEYWORDS);
@@ -172,6 +174,25 @@ function classifyAnchor(row: MarketRow): { anchorType: AnchorType; insiderPossib
       insiderPossible: false,
       confidence: 0.95
     };
+  }
+
+  // 3) ML model (only if confident enough). We keep hard gates above for precision.
+  if (model) {
+    const enriched = `${text} category=${category} provider=${provider}`;
+    const prediction = model.predict(enriched);
+    const confidence = prediction.confidence;
+
+    let anchorType = prediction.anchorType;
+    if (anchorType === "spot_price_anchored" && !isCryptoContext) anchorType = "other_unknown";
+    if (anchorType === "live_score_anchored" && !isSportsContext) anchorType = "other_unknown";
+
+    if (confidence >= 0.55) {
+      return {
+        anchorType,
+        insiderPossible: anchorTypeInsiderPossible(anchorType),
+        confidence
+      };
+    }
   }
 
   // 3) Macro scheduled releases.
@@ -219,9 +240,11 @@ function classifyAnchor(row: MarketRow): { anchorType: AnchorType; insiderPossib
 
 export async function runMarketProfiling(options?: { limit?: number }): Promise<number> {
   const limit = Math.max(50, Math.min(2000, options?.limit ?? 600));
+  const model = await getModel();
+  const desiredModelVersion = model ? HYBRID_MODEL_VERSION : RULES_MODEL_VERSION;
 
-  const rows = await pool.query<MarketRow>(
-    `
+  const query = model
+    ? `
       SELECT
         m.provider,
         m.market_id,
@@ -235,15 +258,31 @@ export async function runMarketProfiling(options?: { limit?: number }): Promise<
       WHERE p.provider IS NULL
          OR p.model_version <> $1
       ORDER BY m.provider, m.market_id
-      LIMIT $2
-    `,
-    [MODEL_VERSION, limit]
-  );
+      LIMIT $2::int
+    `
+    : `
+      SELECT
+        m.provider,
+        m.market_id,
+        m.title,
+        m.normalized_category,
+        m.metadata_json
+      FROM markets m
+      LEFT JOIN market_profiles p
+        ON p.provider = m.provider
+       AND p.market_id = m.market_id
+      WHERE p.provider IS NULL
+      ORDER BY m.provider, m.market_id
+      LIMIT $1::int
+    `;
+
+  const params = model ? [desiredModelVersion, limit] : [limit];
+  const rows = await pool.query<MarketRow>(query, params);
 
   let upserted = 0;
 
   for (const row of rows.rows) {
-    const profile = classifyAnchor(row);
+    const profile = classifyAnchor(row, model);
 
     await pool.query(
       `
@@ -270,7 +309,7 @@ export async function runMarketProfiling(options?: { limit?: number }): Promise<
         profile.anchorType,
         profile.insiderPossible,
         profile.confidence,
-        MODEL_VERSION
+        desiredModelVersion
       ]
     );
 
@@ -279,4 +318,3 @@ export async function runMarketProfiling(options?: { limit?: number }): Promise<
 
   return upserted;
 }
-

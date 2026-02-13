@@ -1,6 +1,7 @@
 import { WINDOWS, type WindowKey } from "@predict-radar/shared";
 import { config } from "../config.js";
 import { pool } from "../db.js";
+import { sendTelegramMessage } from "../integrations/telegram.js";
 
 const ALERT_THRESHOLDS: Record<WindowKey, number> = {
   "1m": 6,
@@ -102,40 +103,6 @@ async function markSent(signature: string): Promise<void> {
     `,
     [signature]
   );
-}
-
-async function sendTelegramMessage(text: string): Promise<void> {
-  if (!config.TELEGRAM_ENABLED) return;
-  if (!config.TELEGRAM_BOT_TOKEN || !config.TELEGRAM_CHAT_ID) return;
-
-  const response = await fetch(
-    `https://api.telegram.org/bot${config.TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        chat_id: config.TELEGRAM_CHAT_ID,
-        text,
-        disable_web_page_preview: true
-      })
-    }
-  );
-
-  if (response.status === 429) {
-    const body = (await response.json().catch(() => null)) as
-      | { parameters?: { retry_after?: number } }
-      | null;
-    const retrySeconds = body?.parameters?.retry_after ?? 1;
-    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-    return sendTelegramMessage(text);
-  }
-
-  if (!response.ok) {
-    const payload = await response.text();
-    throw new Error(`Telegram failed ${response.status}: ${payload}`);
-  }
 }
 
 export async function runAlerts(): Promise<number> {
