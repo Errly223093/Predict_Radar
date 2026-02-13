@@ -159,6 +159,74 @@ select {
   font-size: 13px;
 }
 
+.provider-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  gap: 10px;
+}
+
+.provider-logo {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.provider-wordmark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.provider-wordmark.kalshi {
+  background: #00f0a8;
+  color: #03130c;
+}
+
+.provider-wordmark.other {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.provider-logo.compact {
+  width: 22px;
+  height: 22px;
+}
+
+.provider-wordmark.compact {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.provider-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .chip.active {
   border-color: var(--accent-2);
   box-shadow: inset 0 0 0 1px rgba(33, 212, 201, 0.3);

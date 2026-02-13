@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState, type JSX } from "react";
 import {
   type Label,
+  type Provider,
   type MoverMarketRow,
   type MoverOutcomeRow,
   type WindowKey
@@ -63,6 +64,19 @@ const STRONG_THRESHOLDS_PP: Record<WindowKey, number> = {
 
 const AUTO_REFRESH_MS = 15_000;
 const PAGE_SIZE = 50;
+
+function providerDisplay(provider: Provider): string {
+  switch (provider) {
+    case "polymarket":
+      return "Polymarket";
+    case "kalshi":
+      return "Kalshi";
+    case "opinion":
+      return "Opinion";
+    default:
+      return provider;
+  }
+}
 
 function toSigned(value: number | null): string {
   if (value === null) return "-";
@@ -192,6 +206,58 @@ function legsForMarket(market: MoverMarketRow): Array<{ side: string | null; tex
   if (metaLegs.length > 0) return metaLegs;
   if (market.provider !== "kalshi") return [];
   return parseKalshiLegsFromTitle(market.marketTitle);
+}
+
+function ProviderLogo({ provider, compact }: { provider: Provider; compact?: boolean }): JSX.Element {
+  if (provider === "polymarket") {
+    const size = compact ? 22 : 28;
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 64 64"
+        className={compact ? "provider-logo polymarket compact" : "provider-logo polymarket"}
+        role="img"
+        aria-label="Polymarket"
+      >
+        <defs>
+          <linearGradient id="pmGradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#23b7ff" />
+            <stop offset="1" stopColor="#0a56ff" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="64" height="64" rx="14" fill="url(#pmGradient)" />
+        <path
+          d="M20 14 L44 22 L44 50 L20 42 Z"
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth="6"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M24 24 L40 28 L24 36 L40 40"
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth="6"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (provider === "kalshi") {
+    return (
+      <span
+        className={compact ? "provider-wordmark kalshi compact" : "provider-wordmark kalshi"}
+        aria-label="Kalshi"
+      >
+        Kalshi
+      </span>
+    );
+  }
+
+  return <span className="provider-wordmark other">{providerDisplay(provider)}</span>;
 }
 
 export default function HomePage(): JSX.Element {
@@ -383,7 +449,9 @@ export default function HomePage(): JSX.Element {
         <div className="chip-row">
           <button
             type="button"
-            className={providers.includes("polymarket") ? "chip active" : "chip"}
+            className={providers.includes("polymarket") ? "chip provider-chip active" : "chip provider-chip"}
+            title="Polymarket"
+            aria-label="Polymarket"
             onClick={() => {
               setExpandedKeys(new Set());
               setProviders((prev) =>
@@ -394,11 +462,14 @@ export default function HomePage(): JSX.Element {
               setPage(1);
             }}
           >
-            Polymarket
+            <ProviderLogo provider="polymarket" />
+            <span className="sr-only">Polymarket</span>
           </button>
           <button
             type="button"
-            className={providers.includes("kalshi") ? "chip active" : "chip"}
+            className={providers.includes("kalshi") ? "chip provider-chip active" : "chip provider-chip"}
+            title="Kalshi"
+            aria-label="Kalshi"
             onClick={() => {
               setExpandedKeys(new Set());
               setProviders((prev) =>
@@ -407,7 +478,8 @@ export default function HomePage(): JSX.Element {
               setPage(1);
             }}
           >
-            Kalshi
+            <ProviderLogo provider="kalshi" />
+            <span className="sr-only">Kalshi</span>
           </button>
           <button type="button" className="chip disabled" disabled>
             Opinion (Coming soon)
@@ -560,7 +632,11 @@ export default function HomePage(): JSX.Element {
                               )}
                             </p>
                           </td>
-                          <td>{market.provider}</td>
+                          <td>
+                            <span className="provider-cell" title={providerDisplay(market.provider)}>
+                              <ProviderLogo provider={market.provider} compact />
+                            </span>
+                          </td>
                           <td className={deltaClass(deltaLive)}>{toSigned(deltaLive)}</td>
                           {showSecondaryWindow && (
                             <td className={deltaClass(deltaSecondary)}>{toSigned(deltaSecondary)}</td>
