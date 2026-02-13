@@ -1,8 +1,9 @@
-import "dotenv/config";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { loadEnvUpwards } from "../utils/env.js";
 
 async function main(): Promise<void> {
+  loadEnvUpwards(import.meta.url);
   const apiIdRaw = process.env.TELEGRAM_API_ID;
   const apiHash = process.env.TELEGRAM_API_HASH;
 

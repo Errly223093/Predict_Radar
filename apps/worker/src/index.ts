@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { config } from "./config.js";
 import { pool, runMigrations } from "./db.js";
 import { KalshiAdapter } from "./providers/kalshi.js";

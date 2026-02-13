@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { loadEnvUpwards } from "./utils/env.js";
+
+loadEnvUpwards(import.meta.url);
 
 const configSchema = z.object({
   DATABASE_URL: z.string().min(1),
