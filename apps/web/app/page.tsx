@@ -196,6 +196,10 @@ function externalMarketUrl(market: MoverMarketRow): string | null {
 
       return null;
     }
+    case "opinion": {
+      const suffix = market.outcomes.length > 2 ? "&type=multi" : "";
+      return `https://app.opinion.trade/detail?topicId=${encodeURIComponent(market.marketId)}${suffix}`;
+    }
     default:
       return null;
   }
