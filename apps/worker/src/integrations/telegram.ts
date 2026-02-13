@@ -50,7 +50,7 @@ async function getUserClient(): Promise<any | null> {
 
   userClientPromise = (async () => {
     const { TelegramClient } = await import("telegram");
-    const { StringSession } = await import("telegram/sessions");
+    const { StringSession } = await import("telegram/sessions/index.js");
 
     const client = new TelegramClient(new StringSession(config.TELEGRAM_SESSION), config.TELEGRAM_API_ID, config.TELEGRAM_API_HASH, {
       connectionRetries: 1

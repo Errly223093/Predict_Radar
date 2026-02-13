@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   }
 
   const { TelegramClient } = await import("telegram");
-  const { StringSession } = await import("telegram/sessions");
+  const { StringSession } = await import("telegram/sessions/index.js");
 
   const rl = readline.createInterface({ input, output });
   const ask = async (prompt: string): Promise<string> => {
@@ -46,4 +46,3 @@ main().catch((error) => {
   console.error("[telegram-login] failed", error);
   process.exitCode = 1;
 });
-
