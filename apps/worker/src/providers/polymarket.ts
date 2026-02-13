@@ -65,6 +65,13 @@ export class PolymarketAdapter implements ProviderAdapter {
       if (!marketId) continue;
 
       const title = String(market["question"] ?? market["title"] ?? "Untitled market");
+      const slug = typeof market["slug"] === "string" ? market["slug"].trim() : "";
+      const marketMeta = slug
+        ? {
+            slug,
+            url: `https://polymarket.com/market/${slug}`
+          }
+        : undefined;
       const rawCategory =
         (market["category"] as string | undefined) ??
         (market["tags"] as string[] | undefined)?.[0] ??
@@ -101,6 +108,7 @@ export class PolymarketAdapter implements ProviderAdapter {
             marketTitle: title,
             rawCategory,
             normalizedCategory,
+            marketMeta,
             probability,
             spreadPp,
             volume24hUsd,
@@ -125,6 +133,7 @@ export class PolymarketAdapter implements ProviderAdapter {
           marketTitle: title,
           rawCategory,
           normalizedCategory,
+          marketMeta,
           probability,
           spreadPp: null,
           volume24hUsd,

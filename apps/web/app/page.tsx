@@ -155,6 +155,38 @@ function displayMarketTitle(market: MoverMarketRow): string {
   return market.marketTitle;
 }
 
+function externalMarketUrl(market: MoverMarketRow): string | null {
+  const metaUrl =
+    market.marketMeta && typeof market.marketMeta["url"] === "string"
+      ? (market.marketMeta["url"] as string)
+      : null;
+  if (metaUrl && metaUrl.trim().length > 0) return metaUrl.trim();
+
+  switch (market.provider) {
+    case "kalshi":
+      return `https://kalshi.com/markets/${encodeURIComponent(market.marketId)}`;
+    case "polymarket": {
+      const slug =
+        market.marketMeta && typeof market.marketMeta["slug"] === "string"
+          ? (market.marketMeta["slug"] as string)
+          : "";
+      const trimmed = slug.trim();
+      if (trimmed.length > 0) {
+        return `https://polymarket.com/market/${encodeURIComponent(trimmed)}`;
+      }
+
+      // Fallback: in some cases our marketId may already be a slug.
+      if (!market.marketId.startsWith("0x")) {
+        return `https://polymarket.com/market/${encodeURIComponent(market.marketId)}`;
+      }
+
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
 function legsForMarket(market: MoverMarketRow): Array<{ side: string | null; text: string }> {
   const metaLegs = getMveLegs(market.marketMeta);
   if (metaLegs.length > 0) return metaLegs;
@@ -494,6 +526,7 @@ export default function HomePage(): JSX.Element {
                     const deltaLive = lead?.deltasPp["1m"] ?? null;
                     const deltaSecondary = lead?.deltasPp[secondaryWindow] ?? null;
                     const legs = legsForMarket(market);
+                    const url = externalMarketUrl(market);
 
                     return (
                       <Fragment key={key}>
@@ -503,7 +536,24 @@ export default function HomePage(): JSX.Element {
                         >
                           <td className="row-no">{rowNo}</td>
                           <td>
-                            <p className="market-title">{displayMarketTitle(market)}</p>
+                            <p className="market-title">
+                              <span className="market-title-text">
+                                {displayMarketTitle(market)}
+                              </span>
+                              {url && (
+                                <a
+                                  className="market-link"
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                  }}
+                                >
+                                  Open
+                                </a>
+                              )}
+                            </p>
                           </td>
                           <td>{market.provider}</td>
                           <td className={deltaClass(deltaLive)}>{toSigned(deltaLive)}</td>
