@@ -405,6 +405,16 @@ th {
   width: 120px;
 }
 
+.num-th {
+  width: 120px;
+  text-align: right;
+}
+
+.num-cell {
+  text-align: right;
+  font-family: var(--font-mono), monospace;
+}
+
 .th-button {
   border: none;
   background: transparent;

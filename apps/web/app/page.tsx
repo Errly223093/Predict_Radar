@@ -369,7 +369,7 @@ export default function HomePage(): JSX.Element {
   };
 
   const showSecondaryWindow = secondaryWindow !== "1m";
-  const tableColumnCount = showSecondaryWindow ? 7 : 6;
+  const tableColumnCount = showSecondaryWindow ? 8 : 7;
 
   return (
     <main className="page-shell">
@@ -596,6 +596,7 @@ export default function HomePage(): JSX.Element {
                         </button>
                       </th>
                     )}
+                    <th className="num-th">Vol 24h</th>
                     <th>Category</th>
                     <th>Label</th>
                   </tr>
@@ -608,6 +609,7 @@ export default function HomePage(): JSX.Element {
                     const lead = leadOutcome(market);
                     const deltaLive = lead?.deltasPp["1m"] ?? null;
                     const deltaSecondary = showSecondaryWindow ? lead?.deltasPp[secondaryWindow] ?? null : null;
+                    const volume24h = lead?.volume24hUsd ?? null;
                     const legs = legsForMarket(market);
                     const url = externalMarketUrl(market);
 
@@ -647,6 +649,9 @@ export default function HomePage(): JSX.Element {
                           {showSecondaryWindow && (
                             <td className={deltaClass(deltaSecondary)}>{toSigned(deltaSecondary)}</td>
                           )}
+                          <td className="num-cell" title={volume24h === null ? "" : String(volume24h)}>
+                            {formatUsd(volume24h)}
+                          </td>
                           <td>{market.normalizedCategory}</td>
                           <td>
                             <span className={`pill ${market.label}`}>{labelDisplay(market.label)}</span>
@@ -682,6 +687,7 @@ export default function HomePage(): JSX.Element {
                                           <th>{WINDOW_LABELS["1m"]}</th>
                                           {showSecondaryWindow && <th>{WINDOW_LABELS[secondaryWindow]}</th>}
                                           <th>24h</th>
+                                          <th className="num-th">Vol 24h</th>
                                           <th>Liquidity</th>
                                           <th>Spread</th>
                                           <th>Label</th>
@@ -706,6 +712,9 @@ export default function HomePage(): JSX.Element {
                                                 <td className={deltaClass(second)}>{toSigned(second)}</td>
                                               )}
                                               <td className={deltaClass(day)}>{toSigned(day)}</td>
+                                              <td className="num-cell" title={outcome.volume24hUsd === null ? "" : String(outcome.volume24hUsd)}>
+                                                {formatUsd(outcome.volume24hUsd)}
+                                              </td>
                                               <td>{formatUsd(outcome.liquidityUsd)}</td>
                                               <td>
                                                 {outcome.spreadPp === null
