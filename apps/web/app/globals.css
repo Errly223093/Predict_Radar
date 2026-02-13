@@ -179,6 +179,11 @@ select {
   border-radius: 10px;
 }
 
+.provider-image.compact {
+  height: 22px;
+  border-radius: 8px;
+}
+
 .provider-wordmark {
   display: inline-flex;
   align-items: center;

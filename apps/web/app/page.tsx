@@ -210,50 +210,14 @@ function legsForMarket(market: MoverMarketRow): Array<{ side: string | null; tex
 
 function ProviderLogo({ provider, compact }: { provider: Provider; compact?: boolean }): JSX.Element {
   if (provider === "polymarket") {
-    if (!compact) {
-      return (
-        <img
-          className="provider-image polymarket"
-          src="/providers/polymarket-wordmark.svg"
-          alt="Polymarket"
-          loading="eager"
-        />
-      );
-    }
-
-    const size = 22;
     return (
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 64 64"
-        className="provider-logo polymarket compact"
-        role="img"
-        aria-label="Polymarket"
-      >
-        <defs>
-          <linearGradient id="pmGradientCompact" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#2f7bff" />
-            <stop offset="1" stopColor="#2b5bff" />
-          </linearGradient>
-        </defs>
-        <rect x="0" y="0" width="64" height="64" rx="14" fill="url(#pmGradientCompact)" />
-        <path
-          d="M20 14 L44 22 L44 50 L20 42 Z"
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth="6"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M24 24 L40 28 L24 36 L40 40"
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth="6"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-        />
-      </svg>
+      <img
+        className={compact ? "provider-image polymarket compact" : "provider-image polymarket"}
+        src="/providers/polymarket-wordmark.svg"
+        alt="Polymarket"
+        loading="lazy"
+        decoding="async"
+      />
     );
   }
 
