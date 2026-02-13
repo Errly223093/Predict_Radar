@@ -117,6 +117,51 @@ function getMveLegs(meta: Record<string, unknown> | null): Array<{ side: string 
     .filter((leg) => leg.text.trim().length > 0);
 }
 
+function parseKalshiLegsFromTitle(rawTitle: string): Array<{ side: string | null; text: string }> {
+  const parts = rawTitle
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length < 2) return [];
+
+  return parts
+    .map((raw) => {
+      const lower = raw.toLowerCase();
+      if (lower.startsWith("yes ")) {
+        return { side: "yes", text: raw.slice(4).trim() };
+      }
+      if (lower.startsWith("no ")) {
+        return { side: "no", text: raw.slice(3).trim() };
+      }
+      return { side: null, text: raw };
+    })
+    .filter((leg) => leg.text.trim().length > 0);
+}
+
+function kalshiTitleSummary(rawTitle: string): string {
+  const legs = parseKalshiLegsFromTitle(rawTitle);
+  if (legs.length < 2) return rawTitle;
+  const headline = legs[0]?.text?.slice(0, 140) || "Combo";
+  return `${headline} (+${legs.length - 1} legs)`;
+}
+
+function displayMarketTitle(market: MoverMarketRow): string {
+  if (market.provider !== "kalshi") return market.marketTitle;
+  // Defensive: if Kalshi still serves comma-joined MVE titles, show a short summary.
+  if (market.marketTitle.includes(",")) {
+    return kalshiTitleSummary(market.marketTitle);
+  }
+  return market.marketTitle;
+}
+
+function legsForMarket(market: MoverMarketRow): Array<{ side: string | null; text: string }> {
+  const metaLegs = getMveLegs(market.marketMeta);
+  if (metaLegs.length > 0) return metaLegs;
+  if (market.provider !== "kalshi") return [];
+  return parseKalshiLegsFromTitle(market.marketTitle);
+}
+
 export default function HomePage(): JSX.Element {
   const [secondaryWindow, setSecondaryWindow] = useState<WindowKey>("30m");
   const [sortWindow, setSortWindow] = useState<WindowKey>("1m");
@@ -448,6 +493,7 @@ export default function HomePage(): JSX.Element {
                     const lead = leadOutcome(market);
                     const deltaLive = lead?.deltasPp["1m"] ?? null;
                     const deltaSecondary = lead?.deltasPp[secondaryWindow] ?? null;
+                    const legs = legsForMarket(market);
 
                     return (
                       <Fragment key={key}>
@@ -457,7 +503,7 @@ export default function HomePage(): JSX.Element {
                         >
                           <td className="row-no">{rowNo}</td>
                           <td>
-                            <p className="market-title">{market.marketTitle}</p>
+                            <p className="market-title">{displayMarketTitle(market)}</p>
                           </td>
                           <td>{market.provider}</td>
                           <td className={deltaClass(deltaLive)}>{toSigned(deltaLive)}</td>
@@ -472,11 +518,11 @@ export default function HomePage(): JSX.Element {
                           <tr className="details-row">
                             <td colSpan={7}>
                               <div className="details-panel">
-                                {isKalshiMve(market.marketMeta) && (
+                                {legs.length > 0 && (
                                   <div className="legs-panel">
                                     <h3>Legs</h3>
                                     <div className="legs-grid">
-                                      {getMveLegs(market.marketMeta).map((leg, legIndex) => (
+                                      {legs.map((leg, legIndex) => (
                                         <div key={`${key}:leg:${legIndex}`} className="leg-chip">
                                           <span className="leg-side">{leg.side ?? "?"}</span>
                                           <span className="leg-text">{leg.text}</span>

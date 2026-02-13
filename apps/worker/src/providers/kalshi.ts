@@ -83,7 +83,24 @@ export class KalshiAdapter implements ProviderAdapter {
       const mveSelectedLegs = Array.isArray(market["mve_selected_legs"])
         ? (market["mve_selected_legs"] as UnknownRecord[])
         : [];
-      const isMve = mveSelectedLegs.length >= 2;
+      const collectionTicker = String(market["mve_collection_ticker"] ?? "").trim();
+      const customStrike = (market["custom_strike"] ?? null) as UnknownRecord | null;
+      const associatedMarketsRaw =
+        customStrike && typeof customStrike === "object"
+          ? customStrike["Associated Markets"]
+          : null;
+      const associatedMarketsCount =
+        typeof associatedMarketsRaw === "string" && associatedMarketsRaw.trim().length > 0
+          ? associatedMarketsRaw.split(",").map((item) => item.trim()).filter(Boolean).length
+          : 0;
+      const looksLikeMveTitle =
+        rawTitle.includes(",") && /\b(yes|no)\b/i.test(rawTitle) && rawTitle.length > 40;
+
+      const isMve =
+        mveSelectedLegs.length >= 2 ||
+        collectionTicker.length > 0 ||
+        associatedMarketsCount >= 2 ||
+        looksLikeMveTitle;
 
       let title = rawTitle;
       let marketMeta: Record<string, unknown> | undefined;
@@ -98,7 +115,8 @@ export class KalshiAdapter implements ProviderAdapter {
           legsCount,
           originalTitle: rawTitle,
           eventTicker: String(market["event_ticker"] ?? ""),
-          collectionTicker: String(market["mve_collection_ticker"] ?? ""),
+          collectionTicker,
+          associatedMarketsCount,
           selectedLegs: mveSelectedLegs
         };
       }
