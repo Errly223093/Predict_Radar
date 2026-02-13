@@ -172,6 +172,13 @@ select {
   flex: 0 0 auto;
 }
 
+.provider-image {
+  display: block;
+  height: 28px;
+  width: auto;
+  border-radius: 10px;
+}
+
 .provider-wordmark {
   display: inline-flex;
   align-items: center;

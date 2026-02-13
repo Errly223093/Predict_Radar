@@ -210,23 +210,34 @@ function legsForMarket(market: MoverMarketRow): Array<{ side: string | null; tex
 
 function ProviderLogo({ provider, compact }: { provider: Provider; compact?: boolean }): JSX.Element {
   if (provider === "polymarket") {
-    const size = compact ? 22 : 28;
+    if (!compact) {
+      return (
+        <img
+          className="provider-image polymarket"
+          src="/providers/polymarket-wordmark.svg"
+          alt="Polymarket"
+          loading="eager"
+        />
+      );
+    }
+
+    const size = 22;
     return (
       <svg
         width={size}
         height={size}
         viewBox="0 0 64 64"
-        className={compact ? "provider-logo polymarket compact" : "provider-logo polymarket"}
+        className="provider-logo polymarket compact"
         role="img"
         aria-label="Polymarket"
       >
         <defs>
-          <linearGradient id="pmGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#23b7ff" />
-            <stop offset="1" stopColor="#0a56ff" />
+          <linearGradient id="pmGradientCompact" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#2f7bff" />
+            <stop offset="1" stopColor="#2b5bff" />
           </linearGradient>
         </defs>
-        <rect x="0" y="0" width="64" height="64" rx="14" fill="url(#pmGradient)" />
+        <rect x="0" y="0" width="64" height="64" rx="14" fill="url(#pmGradientCompact)" />
         <path
           d="M20 14 L44 22 L44 50 L20 42 Z"
           fill="none"
