@@ -30,6 +30,15 @@ function centsToProbability(value: unknown): number | null {
   return clampProbability(numeric > 1 ? numeric / 100 : numeric);
 }
 
+function centsToQuoteProbability(value: unknown): number | null {
+  const numeric = toNumber(value);
+  if (numeric === null) return null;
+  // Kalshi uses 0/100 as placeholders when no quotes exist (common on inactive markets).
+  // Treat them as missing so we don't report a fake 0.00pp spread.
+  if (numeric <= 0 || numeric >= 100) return null;
+  return clampProbability(numeric / 100);
+}
+
 async function fetchOpenMarkets(): Promise<UnknownRecord[]> {
   for (const endpoint of KALSHI_ENDPOINTS) {
     try {
@@ -126,8 +135,10 @@ export class KalshiAdapter implements ProviderAdapter {
         null;
       const normalizedCategory = normalizeCategory(rawCategory, title);
 
-      const yesBid = centsToProbability(market["yes_bid"]);
-      const yesAsk = centsToProbability(market["yes_ask"]);
+      const yesBid = centsToQuoteProbability(market["yes_bid"]);
+      const yesAsk = centsToQuoteProbability(market["yes_ask"]);
+      const noBid = centsToQuoteProbability(market["no_bid"]);
+      const noAsk = centsToQuoteProbability(market["no_ask"]);
       const last = centsToProbability(market["last_price"]);
       const yesProb =
         yesBid !== null && yesAsk !== null
@@ -137,8 +148,11 @@ export class KalshiAdapter implements ProviderAdapter {
             : null;
       if (yesProb === null) continue;
 
-      const spreadPp =
+      const spreadYesPp =
         yesBid !== null && yesAsk !== null ? Math.abs(yesAsk - yesBid) * 100 : null;
+      const spreadNoPp =
+        noBid !== null && noAsk !== null ? Math.abs(noAsk - noBid) * 100 : null;
+      const spreadPp = spreadYesPp ?? spreadNoPp;
       const volume24hUsd =
         toNumber(market["volume_24h"]) ?? toNumber(market["volume"]) ?? null;
       const liquidityUsd = toNumber(market["open_interest"]) ?? volume24hUsd;
