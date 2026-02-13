@@ -48,7 +48,7 @@ const WINDOW_LABELS: Record<WindowKey, string> = {
   "24h": "24h"
 };
 
-const SECONDARY_WINDOWS: WindowKey[] = ["5m", "10m", "30m", "1h", "6h", "12h", "24h"];
+const WINDOW_OPTIONS: WindowKey[] = ["1m", "5m", "10m", "30m", "1h", "6h", "12h", "24h"];
 
 const STRONG_THRESHOLDS_PP: Record<WindowKey, number> = {
   "1m": 6,
@@ -311,6 +311,9 @@ export default function HomePage(): JSX.Element {
     return market.outcomes.find((outcome) => outcome.outcomeId === market.leadOutcomeId) ?? null;
   };
 
+  const showSecondaryWindow = secondaryWindow !== "1m";
+  const tableColumnCount = showSecondaryWindow ? 7 : 6;
+
   return (
     <main className="page-shell">
       <section className="hero-card">
@@ -443,7 +446,7 @@ export default function HomePage(): JSX.Element {
               value={secondaryWindow}
               onChange={(e) => onSecondaryWindowChange(e.target.value as WindowKey)}
             >
-              {SECONDARY_WINDOWS.map((window) => (
+              {WINDOW_OPTIONS.map((window) => (
                 <option key={window} value={window}>
                   {WINDOW_LABELS[window]}
                 </option>
@@ -503,16 +506,18 @@ export default function HomePage(): JSX.Element {
                         {sortWindow === "1m" ? (sortDir === "desc" ? " v" : " ^") : ""}
                       </button>
                     </th>
-                    <th className="delta-th">
-                      <button
-                        type="button"
-                        className="th-button"
-                        onClick={() => onSortClick(secondaryWindow)}
-                      >
-                        {WINDOW_LABELS[secondaryWindow]}
-                        {sortWindow === secondaryWindow ? (sortDir === "desc" ? " v" : " ^") : ""}
-                      </button>
-                    </th>
+                    {showSecondaryWindow && (
+                      <th className="delta-th">
+                        <button
+                          type="button"
+                          className="th-button"
+                          onClick={() => onSortClick(secondaryWindow)}
+                        >
+                          {WINDOW_LABELS[secondaryWindow]}
+                          {sortWindow === secondaryWindow ? (sortDir === "desc" ? " v" : " ^") : ""}
+                        </button>
+                      </th>
+                    )}
                     <th>Category</th>
                     <th>Label</th>
                   </tr>
@@ -524,7 +529,7 @@ export default function HomePage(): JSX.Element {
                     const rowNo = (page - 1) * PAGE_SIZE + index + 1;
                     const lead = leadOutcome(market);
                     const deltaLive = lead?.deltasPp["1m"] ?? null;
-                    const deltaSecondary = lead?.deltasPp[secondaryWindow] ?? null;
+                    const deltaSecondary = showSecondaryWindow ? lead?.deltasPp[secondaryWindow] ?? null : null;
                     const legs = legsForMarket(market);
                     const url = externalMarketUrl(market);
 
@@ -557,7 +562,9 @@ export default function HomePage(): JSX.Element {
                           </td>
                           <td>{market.provider}</td>
                           <td className={deltaClass(deltaLive)}>{toSigned(deltaLive)}</td>
-                          <td className={deltaClass(deltaSecondary)}>{toSigned(deltaSecondary)}</td>
+                          {showSecondaryWindow && (
+                            <td className={deltaClass(deltaSecondary)}>{toSigned(deltaSecondary)}</td>
+                          )}
                           <td>{market.normalizedCategory}</td>
                           <td>
                             <span className={`pill ${market.label}`}>{labelDisplay(market.label)}</span>
@@ -566,7 +573,7 @@ export default function HomePage(): JSX.Element {
 
                         {expanded && (
                           <tr className="details-row">
-                            <td colSpan={7}>
+                            <td colSpan={tableColumnCount}>
                               <div className="details-panel">
                                 {legs.length > 0 && (
                                   <div className="legs-panel">
@@ -591,7 +598,7 @@ export default function HomePage(): JSX.Element {
                                           <th>Outcome</th>
                                           <th>Prob</th>
                                           <th>{WINDOW_LABELS["1m"]}</th>
-                                          <th>{WINDOW_LABELS[secondaryWindow]}</th>
+                                          {showSecondaryWindow && <th>{WINDOW_LABELS[secondaryWindow]}</th>}
                                           <th>24h</th>
                                           <th>Liquidity</th>
                                           <th>Spread</th>
@@ -602,7 +609,7 @@ export default function HomePage(): JSX.Element {
                                       <tbody>
                                         {market.outcomes.map((outcome) => {
                                           const live = outcome.deltasPp["1m"];
-                                          const second = outcome.deltasPp[secondaryWindow];
+                                          const second = showSecondaryWindow ? outcome.deltasPp[secondaryWindow] : null;
                                           const day = outcome.deltasPp["24h"];
                                           const isLead = outcome.outcomeId === market.leadOutcomeId;
                                           return (
@@ -613,7 +620,9 @@ export default function HomePage(): JSX.Element {
                                               <td>{outcome.outcomeLabel}</td>
                                               <td>{(outcome.probability * 100).toFixed(2)}%</td>
                                               <td className={deltaClass(live)}>{toSigned(live)}</td>
-                                              <td className={deltaClass(second)}>{toSigned(second)}</td>
+                                              {showSecondaryWindow && (
+                                                <td className={deltaClass(second)}>{toSigned(second)}</td>
+                                              )}
                                               <td className={deltaClass(day)}>{toSigned(day)}</td>
                                               <td>{formatUsd(outcome.liquidityUsd)}</td>
                                               <td>
