@@ -248,6 +248,8 @@ export class OpinionAdapter implements ProviderAdapter {
     type BinarySpec = {
       marketId: string;
       title: string;
+      marketKind: "opinion" | "opinion_multi";
+      marketUrl: string;
       yesTokenId: string;
       noTokenId: string;
       questionId: string;
@@ -259,6 +261,8 @@ export class OpinionAdapter implements ProviderAdapter {
     type ChoiceSpec = {
       marketId: string;
       title: string;
+      marketKind: "opinion" | "opinion_multi";
+      marketUrl: string;
       outcomeId: string;
       outcomeLabel: string;
       yesTokenId: string;
@@ -282,8 +286,18 @@ export class OpinionAdapter implements ProviderAdapter {
 
       const childrenRaw = market["childMarkets"];
       const children = Array.isArray(childrenRaw) ? (childrenRaw as UnknownRecord[]) : [];
+      const isMulti = children.length > 0;
+      const marketKind: "opinion" | "opinion_multi" = isMulti ? "opinion_multi" : "opinion";
+      const marketUrl = `https://app.opinion.trade/detail?topicId=${encodeURIComponent(marketId)}${
+        isMulti ? "&type=multi" : ""
+      }`;
 
       if (children.length > 0) {
+        const weights = children
+          .map((child) => toNumber((child ?? {})["volume"]))
+          .filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
+        const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+
         for (const child of children) {
           const yesTokenId = String(child["yesTokenId"] ?? "").trim();
           if (!yesTokenId) continue;
@@ -293,15 +307,25 @@ export class OpinionAdapter implements ProviderAdapter {
           const chainKey = chainKeyFromChainId(child["chainId"] ?? market["chainId"]);
           if (!questionId || !chainKey) continue;
 
+          const childVolumeWeight = toNumber(child["volume"]);
+          const childVolume24hUsd =
+            volume24hUsd === null
+              ? null
+              : totalWeight > 0 && childVolumeWeight !== null && childVolumeWeight > 0
+                ? (volume24hUsd * childVolumeWeight) / totalWeight
+                : volume24hUsd / children.length;
+
           choiceOutcomes.push({
             marketId,
             title,
+            marketKind,
+            marketUrl,
             outcomeId: yesTokenId,
             outcomeLabel: childTitle,
             yesTokenId,
             questionId,
             chainKey,
-            volume24hUsd,
+            volume24hUsd: childVolume24hUsd,
             normalizedCategory
           });
         }
@@ -317,6 +341,8 @@ export class OpinionAdapter implements ProviderAdapter {
       binaryMarkets.push({
         marketId,
         title,
+        marketKind,
+        marketUrl,
         yesTokenId,
         noTokenId,
         questionId,
@@ -399,7 +425,7 @@ export class OpinionAdapter implements ProviderAdapter {
         marketTitle: outcome.title,
         rawCategory: null,
         normalizedCategory: outcome.normalizedCategory,
-        marketMeta: { kind: "opinion", marketId: outcome.marketId },
+        marketMeta: { kind: outcome.marketKind, marketId: outcome.marketId, url: outcome.marketUrl },
         probability: yesProb,
         spreadPp: metrics?.spreadPp ?? null,
         volume24hUsd: outcome.volume24hUsd,
@@ -422,7 +448,7 @@ export class OpinionAdapter implements ProviderAdapter {
         marketTitle: market.title,
         rawCategory: null,
         normalizedCategory: market.normalizedCategory,
-        marketMeta: { kind: "opinion", marketId: market.marketId },
+        marketMeta: { kind: market.marketKind, marketId: market.marketId, url: market.marketUrl },
         probability: yesProb,
         spreadPp: metrics?.spreadPp ?? null,
         volume24hUsd: market.volume24hUsd,
@@ -438,7 +464,7 @@ export class OpinionAdapter implements ProviderAdapter {
         marketTitle: market.title,
         rawCategory: null,
         normalizedCategory: market.normalizedCategory,
-        marketMeta: { kind: "opinion", marketId: market.marketId },
+        marketMeta: { kind: market.marketKind, marketId: market.marketId, url: market.marketUrl },
         probability: clampProbability(1 - yesProb),
         spreadPp: metrics?.spreadPp ?? null,
         volume24hUsd: market.volume24hUsd,

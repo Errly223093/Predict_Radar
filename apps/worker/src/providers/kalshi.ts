@@ -88,6 +88,7 @@ export class KalshiAdapter implements ProviderAdapter {
       const marketId = String(market["ticker"] ?? market["id"] ?? "");
       if (!marketId) continue;
 
+      const marketUrl = `https://kalshi.com/markets/${encodeURIComponent(marketId)}`;
       const rawTitle = String(market["title"] ?? market["subtitle"] ?? marketId);
       const mveSelectedLegs = Array.isArray(market["mve_selected_legs"])
         ? (market["mve_selected_legs"] as UnknownRecord[])
@@ -112,13 +113,14 @@ export class KalshiAdapter implements ProviderAdapter {
         looksLikeMveTitle;
 
       let title = rawTitle;
-      let marketMeta: Record<string, unknown> | undefined;
+      let marketMeta: Record<string, unknown> | undefined = { url: marketUrl };
       if (isMve) {
         const legs = buildMveLegs(rawTitle);
         const legsCount = legs.length || mveSelectedLegs.length;
         const headline = legs[0]?.text?.slice(0, 140) || "Combo";
         title = legsCount > 1 ? `${headline} (+${legsCount - 1} legs)` : headline;
         marketMeta = {
+          url: marketUrl,
           kind: "kalshi_mve",
           legs,
           legsCount,

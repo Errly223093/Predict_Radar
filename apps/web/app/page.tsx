@@ -212,6 +212,10 @@ function legsForMarket(market: MoverMarketRow): Array<{ side: string | null; tex
   return parseKalshiLegsFromTitle(market.marketTitle);
 }
 
+function isOpinionMulti(meta: Record<string, unknown> | null): boolean {
+  return Boolean(meta && meta["kind"] === "opinion_multi");
+}
+
 function ProviderLogo({ provider, compact }: { provider: Provider; compact?: boolean }): JSX.Element {
   if (provider === "polymarket") {
     return (
@@ -609,7 +613,19 @@ export default function HomePage(): JSX.Element {
                     const lead = leadOutcome(market);
                     const deltaLive = lead?.deltasPp["1m"] ?? null;
                     const deltaSecondary = showSecondaryWindow ? lead?.deltasPp[secondaryWindow] ?? null : null;
-                    const volume24h = lead?.volume24hUsd ?? null;
+                    const volume24h = (() => {
+                      if (market.provider === "opinion" && isOpinionMulti(market.marketMeta)) {
+                        let sum = 0;
+                        let has = false;
+                        for (const outcome of market.outcomes) {
+                          if (outcome.volume24hUsd === null) continue;
+                          sum += outcome.volume24hUsd;
+                          has = true;
+                        }
+                        return has ? sum : lead?.volume24hUsd ?? null;
+                      }
+                      return lead?.volume24hUsd ?? null;
+                    })();
                     const legs = legsForMarket(market);
                     const url = externalMarketUrl(market);
 
