@@ -3,6 +3,7 @@ import { pool } from "@/lib/db";
 import { type MoverRow, WINDOWS, type WindowKey } from "@/lib/contracts";
 
 const ORDER_COLUMN_MAP: Record<WindowKey, string> = {
+  // NOTE: keep in sync with DB deltas columns
   "3m": "d.delta_3m",
   "9m": "d.delta_9m",
   "30m": "d.delta_30m",
@@ -47,6 +48,18 @@ function parseWindow(value: string | null): WindowKey {
   return "3m";
 }
 
+function parsePage(value: string | null): number {
+  const numeric = value ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.max(1, Math.floor(numeric));
+}
+
+function parsePageSize(value: string | null): number {
+  const numeric = value ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) return 50;
+  return Math.max(10, Math.min(100, Math.floor(numeric)));
+}
+
 function parseTab(value: string | null): TabFilter {
   if (value === "opaque" || value === "exogenous" || value === "all") return value;
   return "opaque";
@@ -69,14 +82,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const windowKey = parseWindow(searchParams.get("window"));
     const sortDir = searchParams.get("sort") === "asc" ? "ASC" : "DESC";
+    const page = parsePage(searchParams.get("page"));
+    const pageSize = parsePageSize(searchParams.get("pageSize"));
+    const offset = (page - 1) * pageSize;
     const providers = parseProviders(searchParams.get("providers"));
     const category = searchParams.get("category")?.trim().toLowerCase() ?? "";
     const tab = parseTab(searchParams.get("tab"));
     const minLiquidity = Number(searchParams.get("minLiquidity") ?? "5000");
     const maxSpread = Number(searchParams.get("maxSpread") ?? "15");
     const includeLowLiquidity = searchParams.get("includeLowLiquidity") === "true";
-    const limitRaw = Number(searchParams.get("limit") ?? "200");
-    const limit = Number.isFinite(limitRaw) ? Math.max(20, Math.min(500, limitRaw)) : 200;
 
     const whereParts: string[] = ["d.provider = ANY($1::text[])"];
     const params: unknown[] = [providers];
@@ -104,9 +118,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       cursor += 1;
     }
 
-    params.push(limit);
-
     const orderColumn = ORDER_COLUMN_MAP[windowKey];
+
+    const countQuery = `
+      WITH latest AS (
+        SELECT MAX(ts_minute) AS ts
+        FROM deltas
+      )
+      SELECT COUNT(*)::int AS total_rows
+      FROM deltas d
+      JOIN latest l ON d.ts_minute = l.ts
+      JOIN markets m
+        ON m.provider = d.provider
+       AND m.market_id = d.market_id
+      JOIN outcomes o
+        ON o.provider = d.provider
+       AND o.market_id = d.market_id
+       AND o.outcome_id = d.outcome_id
+      JOIN snapshots_1m s
+        ON s.ts_minute = d.ts_minute
+       AND s.provider = d.provider
+       AND s.market_id = d.market_id
+       AND s.outcome_id = d.outcome_id
+      LEFT JOIN classification_scores c
+        ON c.ts_minute = d.ts_minute
+       AND c.provider = d.provider
+       AND c.market_id = d.market_id
+       AND c.outcome_id = d.outcome_id
+      WHERE ${whereParts.join(" AND ")}
+    `;
+
+    const countResult = await pool.query<{ total_rows: number }>(countQuery, params);
+    const totalRows = countResult.rows[0]?.total_rows ?? 0;
+    const totalPages = totalRows === 0 ? 0 : Math.ceil(totalRows / pageSize);
+
+    const dataParams = [...params, pageSize, offset];
+    const limitParam = params.length + 1;
+    const offsetParam = params.length + 2;
 
     const query = `
       WITH latest AS (
@@ -155,10 +203,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
        AND c.outcome_id = d.outcome_id
       WHERE ${whereParts.join(" AND ")}
       ORDER BY ${orderColumn} ${sortDir} NULLS LAST
-      LIMIT $${params.length}
+      LIMIT $${limitParam}
+      OFFSET $${offsetParam}
     `;
 
-    const result = await pool.query<MoverQueryRow>(query, params);
+    const result = await pool.query<MoverQueryRow>(query, dataParams);
 
     const data: MoverRow[] = result.rows.map((row) => ({
       provider: row.provider,
@@ -185,7 +234,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       timestamp: new Date(row.ts_minute).toISOString()
     }));
 
-    return NextResponse.json({ data, meta: { window: windowKey, sort: sortDir.toLowerCase() } });
+    return NextResponse.json({
+      data,
+      meta: {
+        window: windowKey,
+        sort: sortDir.toLowerCase(),
+        page,
+        pageSize,
+        totalRows,
+        totalPages
+      }
+    });
   } catch (error) {
     console.error("[api/movers] failed", error);
     return NextResponse.json(

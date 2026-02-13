@@ -270,6 +270,13 @@ th {
   color: var(--muted);
 }
 
+.row-no {
+  width: 48px;
+  text-align: right;
+  color: var(--muted);
+  font-family: var(--font-mono), monospace;
+}
+
 .market-title {
   margin: 0;
   max-width: 440px;
@@ -316,6 +323,25 @@ th {
   color: #d0d7ea;
   border-color: rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.pagination-bar {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+}
+
+.pagination-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-family: var(--font-mono), monospace;
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 @media (max-width: 980px) {

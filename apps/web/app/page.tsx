@@ -7,6 +7,15 @@ type Tab = "opaque" | "exogenous" | "all";
 
 type Sort = "asc" | "desc";
 
+type MoversMeta = {
+  window: WindowKey;
+  sort: string;
+  page: number;
+  pageSize: number;
+  totalRows: number;
+  totalPages: number;
+};
+
 const CATEGORY_OPTIONS = [
   "all",
   "crypto",
@@ -35,6 +44,7 @@ const WINDOW_LABELS: Record<WindowKey, string> = {
 };
 
 const AUTO_REFRESH_MS = 15_000;
+const PAGE_SIZE = 50;
 
 function toSigned(value: number | null): string {
   if (value === null) return "-";
@@ -49,17 +59,19 @@ export default function HomePage(): JSX.Element {
   const [category, setCategory] = useState<(typeof CATEGORY_OPTIONS)[number]>("all");
   const [includeLowLiquidity, setIncludeLowLiquidity] = useState(true);
   const [providers, setProviders] = useState<string[]>(["polymarket", "kalshi"]);
+  const [page, setPage] = useState(1);
 
   const [rows, setRows] = useState<MoverRow[]>([]);
+  const [pageMeta, setPageMeta] = useState<MoversMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
 
   const snapshotStats = useMemo(() => {
-    const total = rows.length;
+    const total = pageMeta?.totalRows ?? rows.length;
     const strongMoves = rows.filter((row) => Math.abs(row.deltasPp[windowKey] ?? 0) >= 15).length;
     return { total, strongMoves };
-  }, [rows, windowKey]);
+  }, [rows, windowKey, pageMeta?.totalRows]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +89,9 @@ export default function HomePage(): JSX.Element {
         tab,
         category,
         providers: providersParam,
-        includeLowLiquidity: includeLowLiquidity ? "true" : "false"
+        includeLowLiquidity: includeLowLiquidity ? "true" : "false",
+        page: String(page),
+        pageSize: String(PAGE_SIZE)
       });
 
       if (showLoading) setLoading(true);
@@ -86,9 +100,10 @@ export default function HomePage(): JSX.Element {
       try {
         const res = await fetch(`/api/movers?${params.toString()}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as { data: MoverRow[] };
+        const json = (await res.json()) as { data: MoverRow[]; meta?: MoversMeta };
         if (cancelled) return;
         setRows(json.data);
+        setPageMeta(json.meta ?? null);
         setLastUpdated(new Date().toISOString());
       } catch {
         if (!cancelled) {
@@ -109,7 +124,7 @@ export default function HomePage(): JSX.Element {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [windowKey, sort, tab, category, includeLowLiquidity, providers]);
+  }, [windowKey, sort, tab, category, includeLowLiquidity, providers, page]);
 
   return (
     <main className="page-shell">
@@ -142,7 +157,13 @@ export default function HomePage(): JSX.Element {
         <div className="control-row">
           <label>
             Window
-            <select value={windowKey} onChange={(e) => setWindowKey(e.target.value as WindowKey)}>
+            <select
+              value={windowKey}
+              onChange={(e) => {
+                setWindowKey(e.target.value as WindowKey);
+                setPage(1);
+              }}
+            >
               {WINDOWS.map((window) => (
                 <option key={window} value={window}>
                   {WINDOW_LABELS[window]}
@@ -153,7 +174,13 @@ export default function HomePage(): JSX.Element {
 
           <label>
             Sort
-            <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+            <select
+              value={sort}
+              onChange={(e) => {
+                setSort(e.target.value as Sort);
+                setPage(1);
+              }}
+            >
               <option value="desc">Delta Desc</option>
               <option value="asc">Delta Asc</option>
             </select>
@@ -163,9 +190,10 @@ export default function HomePage(): JSX.Element {
             Category
             <select
               value={category}
-              onChange={(e) =>
-                setCategory(e.target.value as (typeof CATEGORY_OPTIONS)[number])
-              }
+              onChange={(e) => {
+                setCategory(e.target.value as (typeof CATEGORY_OPTIONS)[number]);
+                setPage(1);
+              }}
             >
               {CATEGORY_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -177,7 +205,13 @@ export default function HomePage(): JSX.Element {
 
           <label>
             Tab
-            <select value={tab} onChange={(e) => setTab(e.target.value as Tab)}>
+            <select
+              value={tab}
+              onChange={(e) => {
+                setTab(e.target.value as Tab);
+                setPage(1);
+              }}
+            >
               {(Object.keys(TAB_LABELS) as Tab[]).map((value) => (
                 <option key={value} value={value}>
                   {TAB_LABELS[value]}
@@ -197,6 +231,7 @@ export default function HomePage(): JSX.Element {
                   ? prev.filter((item) => item !== "polymarket")
                   : [...prev, "polymarket"]
               );
+              setPage(1);
             }}
           >
             Polymarket
@@ -210,6 +245,7 @@ export default function HomePage(): JSX.Element {
                   ? prev.filter((item) => item !== "kalshi")
                   : [...prev, "kalshi"]
               );
+              setPage(1);
             }}
           >
             Kalshi
@@ -222,7 +258,10 @@ export default function HomePage(): JSX.Element {
             <input
               type="checkbox"
               checked={includeLowLiquidity}
-              onChange={(e) => setIncludeLowLiquidity(e.target.checked)}
+              onChange={(e) => {
+                setIncludeLowLiquidity(e.target.checked);
+                setPage(1);
+              }}
             />
             Include low-liquidity
           </label>
@@ -252,6 +291,7 @@ export default function HomePage(): JSX.Element {
               onClick={() => {
                 setTab("all");
                 setIncludeLowLiquidity(true);
+                setPage(1);
               }}
             >
               Show all signals
@@ -260,62 +300,91 @@ export default function HomePage(): JSX.Element {
         )}
 
         {!loading && !error && rows.length > 0 && (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Market</th>
-                  <th>Provider</th>
-                  <th>Outcome</th>
-                  <th>Prob</th>
-                  <th>{WINDOW_LABELS[windowKey]}</th>
-                  <th>24h</th>
-                  <th>Category</th>
-                  <th>Label</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const selectedDelta = row.deltasPp[windowKey];
-                  const deltaClass =
-                    selectedDelta === null
-                      ? "neutral"
-                      : selectedDelta > 0
-                        ? "up"
-                        : selectedDelta < 0
-                          ? "down"
-                          : "neutral";
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="row-no">#</th>
+                    <th>Market</th>
+                    <th>Provider</th>
+                    <th>Outcome</th>
+                    <th>Prob</th>
+                    <th>{WINDOW_LABELS[windowKey]}</th>
+                    <th>24h</th>
+                    <th>Category</th>
+                    <th>Label</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => {
+                    const rowNo = (page - 1) * PAGE_SIZE + index + 1;
+                    const selectedDelta = row.deltasPp[windowKey];
+                    const deltaClass =
+                      selectedDelta === null
+                        ? "neutral"
+                        : selectedDelta > 0
+                          ? "up"
+                          : selectedDelta < 0
+                            ? "down"
+                            : "neutral";
 
-                  return (
-                    <tr key={`${row.provider}:${row.marketId}:${row.outcomeId}`}>
-                      <td>
-                        <p className="market-title">{row.marketTitle}</p>
-                      </td>
-                      <td>{row.provider}</td>
-                      <td>{row.outcomeLabel}</td>
-                      <td>{(row.probability * 100).toFixed(2)}%</td>
-                      <td className={deltaClass}>{toSigned(selectedDelta)}</td>
-                      <td
-                        className={
-                          row.deltasPp["24h"] === null
-                            ? "neutral"
-                            : row.deltasPp["24h"] > 0
-                              ? "up"
-                              : "down"
-                        }
-                      >
-                        {toSigned(row.deltasPp["24h"])}
-                      </td>
-                      <td>{row.normalizedCategory}</td>
-                      <td>
-                        <span className={`pill ${row.label}`}>{row.label}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    return (
+                      <tr key={`${row.provider}:${row.marketId}:${row.outcomeId}`}>
+                        <td className="row-no">{rowNo}</td>
+                        <td>
+                          <p className="market-title">{row.marketTitle}</p>
+                        </td>
+                        <td>{row.provider}</td>
+                        <td>{row.outcomeLabel}</td>
+                        <td>{(row.probability * 100).toFixed(2)}%</td>
+                        <td className={deltaClass}>{toSigned(selectedDelta)}</td>
+                        <td
+                          className={
+                            row.deltasPp["24h"] === null
+                              ? "neutral"
+                              : row.deltasPp["24h"] > 0
+                                ? "up"
+                                : "down"
+                          }
+                        >
+                          {toSigned(row.deltasPp["24h"])}
+                        </td>
+                        <td>{row.normalizedCategory}</td>
+                        <td>
+                          <span className={`pill ${row.label}`}>{row.label}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {pageMeta && pageMeta.totalPages > 1 && (
+              <div className="pagination-bar">
+                <button
+                  type="button"
+                  className="chip"
+                  disabled={page <= 1}
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                >
+                  Prev
+                </button>
+                <span className="pagination-label">
+                  Page {page} / {pageMeta.totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="chip"
+                  disabled={page >= pageMeta.totalPages}
+                  onClick={() => setPage((prev) => prev + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>
