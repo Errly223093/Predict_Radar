@@ -45,14 +45,17 @@ async function sendBot(text: string): Promise<void> {
 let userClientPromise: Promise<unknown> | null = null;
 
 async function getUserClient(): Promise<any | null> {
-  if (!config.TELEGRAM_API_ID || !config.TELEGRAM_API_HASH || !config.TELEGRAM_SESSION) return null;
+  const apiId = config.TELEGRAM_API_ID;
+  const apiHash = config.TELEGRAM_API_HASH;
+  const session = config.TELEGRAM_SESSION;
+  if (!apiId || !apiHash || !session) return null;
   if (userClientPromise) return userClientPromise;
 
   userClientPromise = (async () => {
     const { TelegramClient } = await import("telegram");
     const { StringSession } = await import("telegram/sessions/index.js");
 
-    const client = new TelegramClient(new StringSession(config.TELEGRAM_SESSION), config.TELEGRAM_API_ID, config.TELEGRAM_API_HASH, {
+    const client = new TelegramClient(new StringSession(session), apiId, apiHash, {
       connectionRetries: 1
     });
 

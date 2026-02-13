@@ -456,8 +456,23 @@ export default function HomePage(): JSX.Element {
             <ProviderLogo provider="kalshi" />
             <span className="sr-only">Kalshi</span>
           </button>
-          <button type="button" className="chip disabled" disabled>
-            Opinion (Coming soon)
+          <button
+            type="button"
+            className={providers.includes("opinion") ? "chip provider-chip active" : "chip provider-chip"}
+            title="Opinion"
+            aria-label="Opinion"
+            onClick={() => {
+              setExpandedKeys(new Set());
+              setProviders((prev) =>
+                prev.includes("opinion")
+                  ? prev.filter((item) => item !== "opinion")
+                  : [...prev, "opinion"]
+              );
+              setPage(1);
+            }}
+          >
+            <ProviderLogo provider="opinion" />
+            <span className="sr-only">Opinion</span>
           </button>
 
           <label className="checkbox-chip">
