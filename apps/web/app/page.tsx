@@ -221,6 +221,18 @@ function ProviderLogo({ provider, compact }: { provider: Provider; compact?: boo
     );
   }
 
+  if (provider === "opinion") {
+    return (
+      <img
+        className={compact ? "provider-image opinion compact" : "provider-image opinion"}
+        src="/providers/opinion-wordmark.svg"
+        alt="Opinion"
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
+
   if (provider === "kalshi") {
     return (
       <span
