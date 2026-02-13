@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "telegram:login": "tsx src/scripts/telegram-login.ts",
+    "telegram:test": "tsx src/scripts/telegram-test.ts",
     "train:anchor-model": "tsx src/scripts/train-anchor-model.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
