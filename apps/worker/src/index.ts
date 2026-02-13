@@ -6,6 +6,7 @@ import { PolymarketAdapter } from "./providers/polymarket.js";
 import { runAlerts } from "./tasks/alerts.js";
 import { runClassification } from "./tasks/classification.js";
 import { runDeltaComputation } from "./tasks/deltas.js";
+import { runMarketProfiling } from "./tasks/market-profiles.js";
 import { runSnapshotIngestion } from "./tasks/snapshot.js";
 
 const adapters = [new PolymarketAdapter(), new KalshiAdapter(), new OpinionAdapter()];
@@ -23,13 +24,14 @@ async function cycle(): Promise<void> {
 
   try {
     const snapshot = await runSnapshotIngestion(adapters);
+    const profiled = await runMarketProfiling();
     const deltaRows = await runDeltaComputation();
     const classRows = await runClassification();
     const alertCount = await runAlerts();
 
     const elapsedMs = Date.now() - startedAt;
     console.info(
-      `[worker] ts=${snapshot.tsMinute.toISOString()} snapshots=${snapshot.snapshotCount} deltas=${deltaRows} classifications=${classRows} alerts=${alertCount} elapsed_ms=${elapsedMs}`
+      `[worker] ts=${snapshot.tsMinute.toISOString()} snapshots=${snapshot.snapshotCount} profiles=${profiled} deltas=${deltaRows} classifications=${classRows} alerts=${alertCount} elapsed_ms=${elapsedMs}`
     );
   } catch (error) {
     console.error("[worker] cycle failed", error);
