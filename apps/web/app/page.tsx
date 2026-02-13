@@ -258,7 +258,7 @@ export default function HomePage(): JSX.Element {
   const [tab, setTab] = useState<Tab>("all");
   const [category, setCategory] = useState<(typeof CATEGORY_OPTIONS)[number]>("all");
   const [includeLowLiquidity, setIncludeLowLiquidity] = useState(true);
-  const [providers, setProviders] = useState<string[]>(["polymarket", "kalshi"]);
+  const [providers, setProviders] = useState<string[]>(["polymarket", "kalshi", "opinion"]);
   const [page, setPage] = useState(1);
 
   const [markets, setMarkets] = useState<MoverMarketRow[]>([]);
