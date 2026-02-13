@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@predict-radar/shared": "file:../../packages/shared",
+    "dotenv": "^16.4.5",
     "pg": "^8.13.1",
     "telegram": "^2.26.8",
     "zod": "^3.24.1"
