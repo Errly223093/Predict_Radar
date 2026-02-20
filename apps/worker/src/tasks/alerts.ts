@@ -153,6 +153,7 @@ export async function runAlerts(): Promise<number> {
        AND o.market_id = c.market_id
        AND o.outcome_id = c.outcome_id
       WHERE c.ts_minute = $1
+        AND c.provider <> 'opinion'
         AND c.label = 'opaque_info_sensitive'
         AND COALESCE(s.liquidity_usd, 0) >= $2
         AND COALESCE(s.spread_pp, 100) <= $3
